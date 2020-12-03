@@ -3,12 +3,12 @@ package geerpc
 import (
 	"encoding/json"
 	"fmt"
+	"geerpc/codec"
 	"io"
 	"log"
 	"net"
 	"reflect"
 	"sync"
-	"geerpc/codec"
 )
 
 const MagicNumber = 0x3bef5c
@@ -38,7 +38,6 @@ var DefaultServer = NewServer()
 // ServeConn blocks, serving the connection until the client hangs up.
 func (server *Server) ServeConn(conn io.ReadWriteCloser) {
 	defer func() { _ = conn.Close() }()
-
 	var opt Option
 	if err := json.NewDecoder(conn).Decode(&opt); err != nil {
 		log.Println("rpc server: options error: ", err)
@@ -59,25 +58,6 @@ func (server *Server) ServeConn(conn io.ReadWriteCloser) {
 // invalidRequest is a placeholder for response argv when error occurs
 var invalidRequest = struct{}{}
 
-
-
-/**
-
-
-
-serveCodec 的过程非常简单。主要包含三个阶段
-
-读取请求 readRequest
-处理请求 handleRequest
-回复请求 sendResponse
-之前提到过，在一次连接中，允许接收多个请求，即多个 request header 和 request body，因此这里使用了 for 无限制地等待请求的到来，直到发生错误（例如连接被关闭，接收到的报文有问题等），这里需要注意的点有三个：
-
-handleRequest 使用了协程并发执行请求。
-处理请求是并发的，但是回复请求的报文必须是逐个发送的，并发容易导致多个回复报文交织在一起，客户端无法解析。在这里使用锁(sending)保证。
-尽力而为，只有在 header 解析失败时，才终止循环。
-
-
- */
 func (server *Server) serveCodec(cc codec.Codec) {
 	sending := new(sync.Mutex) // make sure to send a complete response
 	wg := new(sync.WaitGroup)  // wait until all request are handled
@@ -159,10 +139,6 @@ func (server *Server) Accept(lis net.Listener) {
 		go server.ServeConn(conn)
 	}
 }
-
-
-
-
 
 // Accept accepts connections on the listener and serves requests
 // for each incoming connection.
